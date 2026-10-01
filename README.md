@@ -26,11 +26,14 @@ Source/
   server_status.go
   alive_servers_activity.go
  Web/
- site.go
- admin.go
- main.astro
- render.astro
+  site.go
+  admin.go
+  main.astro
+  render.astro
 ```
 This is just an idea for now...
 
+
+## Endpoints docs
+later
 
