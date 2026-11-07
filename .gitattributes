@@ -1,0 +1,6 @@
+# GitHub language stats: count the Go server and the Astro dashboard only.
+Source/Web/static/** linguist-generated
+Web/**/*.ts linguist-detectable=false
+Web/**/*.css linguist-detectable=false
+Web/**/*.mjs linguist-detectable=false
+Web/**/*.svg linguist-detectable=false
