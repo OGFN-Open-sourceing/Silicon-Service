@@ -1,0 +1,41 @@
+---
+import Panel from "../layouts/Panel.astro";
+import Icon from "../components/Icon.astro";
+---
+<Panel title="Chat" tab="chat">
+  <form class="card card-body row" id="announce">
+    <input name="message" class="grow" placeholder="Announcement to everyone online" maxlength="500" />
+    <button><Icon name="megaphone" />Send</button>
+  </form>
+  <div class="card">
+    <div class="card-head"><h2>Recent messages</h2><span class="muted">refreshes every 5 s</span></div>
+    <div class="chat-scroll" id="list"><div class="card-body"><div class="skeleton"></div></div></div>
+  </div>
+</Panel>
+<script>
+  import { $, backend, esc, act, every, empty, failed, when } from "../lib/core";
+
+  type Message = { at: number; from: string; to?: string; body: string };
+
+  async function load() {
+    try {
+      const { messages = [] } = await backend<{ messages: Message[] }>("GET", "/chat");
+      $("#list").innerHTML = messages.length
+        ? messages.slice().reverse().map((m) => `<div class="chat-line"><time>${esc(when(m.at))}</time><div><strong>${esc(m.from)}</strong>${m.to ? ` <span class="muted">→ ${esc(m.to)}</span>` : ""}<div style="color:var(--text-2)">${esc(m.body)}</div></div></div>`).join("")
+        : empty("chat", "No messages yet.");
+    } catch (err) {
+      $("#list").innerHTML = `<div class="card-body">${failed(err)}</div>`;
+    }
+  }
+
+  const form = $<HTMLFormElement>("#announce");
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const message = String(new FormData(form).get("message") ?? "").trim();
+    if (!message) return;
+    act(() => backend("POST", "/announce", { message }), "Announcement sent", () => { form.reset(); return load(); });
+  });
+
+  load();
+  every(5000, load);
+</script>

@@ -1,0 +1,29 @@
+---
+import Panel from "../layouts/Panel.astro";
+---
+<Panel title="Audit log" tab="audit">
+  <div class="card">
+    <div class="card-head"><h2>Every change made through Silicon</h2></div>
+    <div id="list"><div class="card-body"><div class="skeleton"></div></div></div>
+  </div>
+</Panel>
+<script>
+  import { $, api, esc, table, empty, failed, when } from "../lib/core";
+
+  type Entry = { at: string; user: string; ip: string; action: string; path?: string; body?: string; status: number };
+
+  api<Entry[]>("GET", "/audit")
+    .then((entries) => {
+      $("#list").innerHTML = table(
+        ["When", "Admin", "Action", "Result"],
+        entries.map((e) => [
+          `<span class="muted">${esc(when(e.at))}</span>`,
+          `<strong>${esc(e.user)}</strong><div class="sub mono">${esc(e.ip)}</div>`,
+          `${esc(e.action)} <span class="mono">${esc(e.path ?? "")}</span>${e.body ? `<div class="sub mono">${esc(e.body)}</div>` : ""}`,
+          `<span class="pill ${e.status >= 400 ? "bad" : "ok"}">${esc(e.status)}</span>`,
+        ]),
+        empty("clock", "Nothing has been changed yet."),
+      );
+    })
+    .catch((err) => ($("#list").innerHTML = `<div class="card-body">${failed(err)}</div>`));
+</script>

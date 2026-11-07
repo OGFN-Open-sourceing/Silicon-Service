@@ -1,0 +1,10 @@
+silicon.exe
+silicon
+silicon.json
+silicon-cert.pem
+silicon-key.pem
+silicon-audit.jsonl
+Web/node_modules/
+Web/.astro/
+Silicon-Service.exe
+*.exe

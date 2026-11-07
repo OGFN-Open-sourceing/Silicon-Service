@@ -1,0 +1,63 @@
+---
+import Panel from "../layouts/Panel.astro";
+import Icon from "../components/Icon.astro";
+---
+<Panel title="Admins" tab="admins">
+  <div class="card">
+    <div class="card-head"><h2>Who can sign in to Silicon</h2></div>
+    <div id="list"><div class="card-body"><div class="skeleton"></div></div></div>
+  </div>
+  <div class="grid two">
+    <form class="card" id="add">
+      <div class="card-head"><h2>Add or update an admin</h2></div>
+      <div class="card-body row">
+        <input name="user" placeholder="User" required class="grow" />
+        <input name="password" type="password" placeholder="Password (8+ characters)" class="grow" />
+        <select name="role"><option value="moderator">Moderator</option><option value="owner">Owner</option></select>
+        <button><Icon name="plus" />Save</button>
+      </div>
+    </form>
+    <form class="card" id="mine">
+      <div class="card-head"><h2>Your password</h2></div>
+      <div class="card-body row">
+        <input name="password" type="password" placeholder="New password (8+)" required class="grow" />
+        <button>Change</button>
+      </div>
+    </form>
+  </div>
+</Panel>
+<script>
+  import { $, api, esc, act, confirmBox, table, onClick, empty, failed, button, person } from "../lib/core";
+
+  type Admin = { user: string; role: string };
+
+  async function load() {
+    try {
+      const admins = await api<Admin[]>("GET", "/admins");
+      $("#list").innerHTML = table(
+        ["Admin", "Role", ""],
+        admins.map((a) => [person(a.user, ""), `<span class="pill ${a.role === "owner" ? "info" : ""}">${esc(a.role)}</span>`, button("Remove", { remove: a.user }, "danger", "trash")]),
+        empty("shield", "No admins."),
+      );
+      onClick($("#list"), "[data-remove]", async (d) => {
+        if (await confirmBox(`Remove ${d.remove}?`, { text: "They can no longer sign in.", ok: "Remove", danger: true }))
+          act(() => api("DELETE", "/admins/" + encodeURIComponent(d.remove!)), `Removed ${d.remove}`, load);
+      });
+    } catch (err) {
+      $("#list").innerHTML = `<div class="card-body">${failed(err)}</div>`;
+    }
+  }
+
+  const add = $<HTMLFormElement>("#add");
+  add.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const f = new FormData(add);
+    act(() => api("POST", "/admins", { user: f.get("user"), password: f.get("password"), role: f.get("role") }), "Admin saved", () => { add.reset(); return load(); });
+  });
+  const mine = $<HTMLFormElement>("#mine");
+  mine.addEventListener("submit", (e) => {
+    e.preventDefault();
+    act(() => api("POST", "/me/password", { password: new FormData(mine).get("password") }), "Password changed", () => mine.reset());
+  });
+  load();
+</script>

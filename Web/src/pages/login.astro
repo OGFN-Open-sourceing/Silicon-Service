@@ -1,0 +1,40 @@
+---
+import Base from "../layouts/Base.astro";
+import Icon from "../components/Icon.astro";
+---
+<Base title="Sign in">
+  <div class="login">
+    <form class="card login-card" id="login-form">
+      <div class="brand">
+        <span class="brand-mark"><Icon name="logo" /></span>
+        <span><div class="brand-name">SILICON</div><div class="brand-sub">Admin panel</div></span>
+      </div>
+      <div>
+        <h1>Welcome back</h1>
+        <p class="muted" style="margin:4px 0 0">Sign in to manage your backend.</p>
+      </div>
+      <label class="field">User<input name="user" autocomplete="username" required autofocus /></label>
+      <label class="field">Password<input name="password" type="password" autocomplete="current-password" required /></label>
+      <button type="submit">Sign in</button>
+      <p class="error-text" id="login-error"></p>
+    </form>
+  </div>
+</Base>
+<script>
+  import { $, api } from "../lib/core";
+  const form = $<HTMLFormElement>("#login-form");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = new FormData(form);
+    const submit = form.querySelector("button")!;
+    submit.disabled = true;
+    $("#login-error").textContent = "";
+    try {
+      await api("POST", "/login", { user: f.get("user"), password: f.get("password") });
+      location.href = "/";
+    } catch (err) {
+      $("#login-error").textContent = (err as Error).message;
+      submit.disabled = false;
+    }
+  });
+</script>

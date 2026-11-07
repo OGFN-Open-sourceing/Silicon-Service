@@ -1,0 +1,44 @@
+---
+import Panel from "../layouts/Panel.astro";
+import Icon from "../components/Icon.astro";
+---
+<Panel title="Overview" tab="overview">
+  <div id="problem"></div>
+  <div class="grid stats">
+    <div class="card stat"><div class="stat-icon"><Icon name="activity" /></div><div class="stat-label">Backend</div><div class="stat-value" id="s-state">-</div><div class="sub" id="s-version">&nbsp;</div></div>
+    <div class="card stat"><div class="stat-icon"><Icon name="users" /></div><div class="stat-label">Online</div><div class="stat-value" id="s-online">-</div><div class="sub">players connected</div></div>
+    <div class="card stat"><div class="stat-icon"><Icon name="queue" /></div><div class="stat-label">In queue</div><div class="stat-value" id="s-queue">-</div><div class="sub">waiting for a match</div></div>
+    <div class="card stat"><div class="stat-icon"><Icon name="swords" /></div><div class="stat-label">In a match</div><div class="stat-value" id="s-match">-</div><div class="sub">dropping in</div></div>
+    <div class="card stat"><div class="stat-icon"><Icon name="server" /></div><div class="stat-label">Game servers</div><div class="stat-value" id="s-servers">-</div><div class="sub">registered sessions</div></div>
+  </div>
+  <div class="grid two">
+    <div class="card">
+      <div class="card-head">
+        <h2>Players online</h2>
+        <span class="muted" id="peak"></span>
+        <div class="segmented" id="range">
+          <button data-hours="1">1h</button><button data-hours="6" class="on">6h</button><button data-hours="24">24h</button>
+        </div>
+      </div>
+      <div class="card-body" id="chart"><div class="skeleton" style="height:220px"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Quick actions</h2></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+        <button class="ghost" id="announce"><Icon name="megaphone" />Send announcement</button>
+        <a class="btn ghost" href="/players/" style="display:flex"><Icon name="users" />Manage players</a>
+        <div data-owner class="hidden" style="display:flex;flex-direction:column;gap:10px">
+          <button class="ghost" id="restart-soft"><Icon name="refresh" />Restart backend (75 s warning)</button>
+          <button class="danger" id="restart-now"><Icon name="power" />Restart backend now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Recent admin activity</h2><a href="/audit/">View all</a></div>
+    <div class="feed" id="feed">{Array.from({ length: 3 }, () => <div class="feed-item"><div class="skeleton" style="flex:1"></div></div>)}</div>
+  </div>
+</Panel>
+<script>
+  import "../scripts/overview";
+</script>

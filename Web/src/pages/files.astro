@@ -1,0 +1,58 @@
+---
+import Panel from "../layouts/Panel.astro";
+import Icon from "../components/Icon.astro";
+---
+<Panel title="Files" tab="files">
+  <div class="card card-body row">
+    <select id="file" class="grow"></select>
+    <span class="muted" id="state"></span>
+    <button id="save" disabled><Icon name="save" />Save</button>
+  </div>
+  <div class="card card-body">
+    <textarea id="content" class="mono" spellcheck="false" placeholder="Pick a file"></textarea>
+  </div>
+</Panel>
+<script>
+  import { $, backend, act, toast, confirmBox, esc } from "../lib/core";
+
+  const select = $<HTMLSelectElement>("#file");
+  const content = $<HTMLTextAreaElement>("#content");
+  const save = $<HTMLButtonElement>("#save");
+  let loaded = "";
+
+  const dirty = () => content.value !== loaded;
+  const mark = () => {
+    save.disabled = !dirty();
+    $("#state").textContent = dirty() ? "unsaved changes" : "";
+  };
+
+  async function open() {
+    const f = await backend<{ content: string }>("GET", "/files/" + encodeURIComponent(select.value));
+    loaded = content.value = f.content;
+    mark();
+  }
+
+  select.addEventListener("change", async () => {
+    if (dirty() && !(await confirmBox("Discard changes?", { text: "Your edits to the open file are lost.", ok: "Discard", danger: true }))) return;
+    open().catch((e) => toast(e.message, true));
+  });
+  content.addEventListener("input", mark);
+  save.addEventListener("click", () =>
+    act(() => backend("PUT", "/files/" + encodeURIComponent(select.value), { content: content.value }), `Saved ${select.value}`, () => {
+      loaded = content.value;
+      mark();
+    }),
+  );
+  addEventListener("beforeunload", (e) => dirty() && e.preventDefault());
+
+  type FileInfo = { name: string; label: string; size: number };
+  const size = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+  backend<{ files: string[]; details?: FileInfo[] }>("GET", "/files")
+    .then(({ files = [], details }) => {
+      const list = details ?? files.map((name) => ({ name, label: name, size: 0 }));
+      select.innerHTML = list.map((f) => `<option value="${esc(f.name)}">${esc(f.label)}${f.size ? ` · ${size(f.size)}` : ""}</option>`).join("");
+      if (files.length) return open();
+    })
+    .catch((e) => toast(e.message, true));
+</script>

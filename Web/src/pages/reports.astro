@@ -1,0 +1,59 @@
+---
+import Panel from "../layouts/Panel.astro";
+---
+<Panel title="Reports" tab="reports">
+  <div class="card">
+    <div class="card-head">
+      <h2>Player reports</h2>
+      <div class="segmented" id="tabs"><button data-show="open" class="on">Open</button><button data-show="all">All</button></div>
+    </div>
+    <div id="list"><div class="card-body"><div class="skeleton"></div></div></div>
+  </div>
+</Panel>
+<script>
+  import { $, backend, esc, act, ask, table, onClick, empty, failed, button, ago, when } from "../lib/core";
+
+  type Report = { id: string; createdAt: number; reporter: string; reporterName: string; reported: string; reportedName: string; reason: string; details: string; status: string };
+  let show = "open";
+
+  async function load() {
+    try {
+      const { reports = [] } = await backend<{ reports: Report[] }>("GET", "/reports");
+      const shown = reports.filter((r) => show === "all" || r.status === "open");
+      $("#list").innerHTML = table(
+        ["Reported", "By", "Reason", "When", "Status", ""],
+        shown.map((r) => [
+          `<strong>${esc(r.reportedName || r.reported)}</strong><div class="sub mono">${esc(r.reported)}</div>`,
+          esc(r.reporterName || r.reporter),
+          `${esc(r.reason)}${r.details ? `<div class="sub">${esc(r.details)}</div>` : ""}`,
+          `<span title="${esc(when(r.createdAt))}">${esc(ago(r.createdAt))}</span>`,
+          `<span class="pill ${r.status === "open" ? "warn" : ""}">${esc(r.status)}</span>`,
+          r.status === "open"
+            ? button("Ban", { ban: r.reported, id: r.id, name: r.reportedName || r.reported }, "danger", "ban") + button("Dismiss", { dismiss: r.id }, "ghost")
+            : "",
+        ]),
+        empty("flag", show === "open" ? "No open reports. Nice." : "No reports yet."),
+      );
+      onClick($("#list"), "[data-dismiss]", (d) => act(() => backend("POST", `/reports/${encodeURIComponent(d.dismiss!)}/resolve`, { action: "dismiss" }), "Report dismissed", load));
+      onClick($("#list"), "[data-ban]", async (d) => {
+        const reason = await ask(`Ban ${d.name}?`, { label: "Reason", value: "Reported", ok: "Ban", danger: true });
+        if (reason === null) return;
+        act(async () => {
+          await backend("POST", `/accounts/${encodeURIComponent(d.ban!)}/ban`, { reason });
+          await backend("POST", `/reports/${encodeURIComponent(d.id!)}/resolve`, { action: "ban" });
+        }, `Banned ${d.name}`, load);
+      });
+    } catch (err) {
+      $("#list").innerHTML = `<div class="card-body">${failed(err)}</div>`;
+    }
+  }
+
+  $("#tabs").addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest("button");
+    if (!b) return;
+    show = b.dataset.show!;
+    document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
+    load();
+  });
+  load();
+</script>

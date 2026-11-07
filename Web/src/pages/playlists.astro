@@ -1,0 +1,255 @@
+---
+import Panel from "../layouts/Panel.astro";
+import Icon from "../components/Icon.astro";
+---
+<Panel title="Playlists" tab="playlists">
+  <button slot="actions" class="ghost hidden" id="add" data-owner><Icon name="plus" />Add from library</button>
+  <div class="card">
+    <div class="card-head">
+      <h2>Modes in the lobby <span class="muted" id="count"></span></h2>
+      <span class="muted" id="note">Sorted by category, then display priority, the way the client orders them.</span>
+    </div>
+    <div id="list"><div class="card-body"><div class="skeleton"></div><div class="skeleton" style="margin-top:12px"></div></div></div>
+  </div>
+  <div class="savebar hidden" id="savebar">
+    <span>Unsaved changes</span>
+    <button class="ghost small" id="revert"><Icon name="undo" />Revert</button>
+    <button class="small" id="save"><Icon name="save" />Save playlists</button>
+  </div>
+  <dialog id="library" class="wide">
+    <form method="dialog" id="library-form">
+      <div class="row" style="justify-content:space-between">
+        <h3>Add from library</h3>
+        <button class="ghost icon" type="button" id="library-close" title="Close"><Icon name="x" /></button>
+      </div>
+      <div class="row">
+        <div class="search"><Icon name="search" /><input id="library-q" placeholder="Search modes, e.g. 50v50, Playground, Solid Gold" autocomplete="off" /></div>
+      </div>
+      <div class="lib" id="library-list"></div>
+      <div class="row" style="justify-content:flex-start">
+        <input id="custom-name" placeholder="Or type a playlist name, e.g. Playlist_DefaultSolo" class="grow mono" />
+        <button type="button" class="ghost" id="custom-add"><Icon name="plus" />Add by name</button>
+      </div>
+    </form>
+  </dialog>
+</Panel>
+<script>
+  import { $, backend, esc, act, confirmBox, toast, failed, me } from "../lib/core";
+  import { icon } from "../lib/icons";
+
+  type Playlist = {
+    name: string; displayName: string; enabled: boolean; image: string; autoImage: string;
+    category: number; priority: number; isDefault: boolean; visibleWhenDisabled: boolean;
+    displayAsNew: boolean; limitedTime: boolean; description: string; subname: string; violator: string; border: string;
+  };
+  type LibraryEntry = { name: string; label: string; group: string; builds: string[]; players: number; squad: number; image: string };
+
+  const CATS = ["Battle Royale", "Limited Time", "Creative / Other"];
+  const catName = (n: number) => CATS[n] ?? `Category ${n}`;
+  const pretty = (name: string) => name.replace(/^Playlist_/, "").replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2");
+
+  let rows: Playlist[] = [];
+  let saved = "";
+  let owner = false;
+  let library: LibraryEntry[] = [];
+  const open = new Set<string>();
+
+  const snapshot = () => JSON.stringify(rows.map(({ autoImage, ...r }) => r));
+  const dirty = () => snapshot() !== saved;
+  const markDirty = () => $("#savebar").classList.toggle("hidden", !dirty() || !owner);
+  const labelOf = (name: string) => library.find((l) => l.name === name)?.label || pretty(name);
+
+  function details(p: Playlist, i: number): string {
+    const dis = owner ? "" : "disabled";
+    const field = (k: keyof Playlist, label: string, extra = "") =>
+      `<label class="field${extra}">${label}<input data-i="${i}" data-k="${k}" value="${esc(p[k])}" ${dis} /></label>`;
+    const check = (k: keyof Playlist, label: string, tip: string) =>
+      `<label class="check" title="${esc(tip)}"><input type="checkbox" data-i="${i}" data-k="${k}" ${p[k] ? "checked" : ""} ${dis} />${label}</label>`;
+    return `<div class="pl-details">
+      <label class="field">Category<select data-i="${i}" data-k="category" ${dis}>${[0, 1, 2].map((n) => `<option value="${n}" ${p.category === n ? "selected" : ""}>${catName(n)}</option>`).join("")}${p.category > 2 ? `<option value="${p.category}" selected>${catName(p.category)}</option>` : ""}</select></label>
+      <label class="field">Display priority<input type="number" data-i="${i}" data-k="priority" value="${p.priority}" ${dis} /></label>
+      ${field("subname", "Subtitle")}
+      ${field("violator", "Violator (corner badge text)")}
+      ${field("border", "Border")}
+      ${field("image", "Custom tile image (https URL)", " wide")}
+      ${field("description", "Description", " wide")}
+      <div class="checks">
+        ${check("isDefault", "Default mode", "Selected when a player opens the mode picker")}
+        ${check("visibleWhenDisabled", "Show when off", "Still listed (greyed out) while disabled")}
+        ${check("displayAsNew", "Show as new", "Adds the NEW badge")}
+        ${check("limitedTime", "Limited time", "Marks it as an LTM")}
+      </div>
+    </div>`;
+  }
+
+  function render() {
+    $("#count").textContent = `(${rows.filter((r) => r.enabled).length} on, ${rows.length} total)`;
+    if (!rows.length) {
+      $("#list").innerHTML = `<div class="empty">${icon("list")}<div>No playlists yet. Add some from the library.</div></div>`;
+      return;
+    }
+    const cats = [...new Set(rows.map((r) => r.category))].sort((a, b) => a - b);
+    $("#list").innerHTML = cats
+      .map((cat) => {
+        const items = rows.map((p, i) => ({ p, i })).filter((x) => x.p.category === cat).sort((a, b) => a.p.priority - b.p.priority);
+        return `<div class="pl-group"><div class="pl-group-head"><span class="stat-label">${esc(catName(cat))}</span><span class="muted">${items.length}</span></div>${items
+          .map(({ p, i }, n) => {
+            const img = p.image || p.autoImage;
+            return `<div class="pl-row${p.enabled ? "" : " off"}">
+              <div class="tile" style="${img ? `background-image:url('${esc(img)}')` : ""}">${p.displayAsNew ? '<span class="badge">New</span>' : ""}</div>
+              <div class="pl-main">
+                <input class="title" data-i="${i}" data-k="displayName" value="${esc(p.displayName)}" placeholder="${esc(labelOf(p.name))}" ${owner ? "" : "disabled"} />
+                <div class="row" style="gap:6px;margin-top:2px">
+                  <span class="sub mono">${esc(p.name)}</span>
+                  ${p.isDefault ? '<span class="pill info plain">Default</span>' : ""}
+                  ${p.limitedTime ? '<span class="pill warn plain">LTM</span>' : ""}
+                  ${!p.enabled && p.visibleWhenDisabled ? '<span class="pill plain">Shown while off</span>' : ""}
+                </div>
+              </div>
+              <div class="pl-tools">
+                <label class="switch" title="${p.enabled ? "On" : "Off"}"><input type="checkbox" data-i="${i}" data-k="enabled" ${p.enabled ? "checked" : ""} ${owner ? "" : "disabled"} /><span></span></label>
+                ${owner ? `<button class="ghost icon small" data-move="${i}:-1" title="Move up" ${n === 0 ? "disabled" : ""}>${icon("up")}</button>
+                <button class="ghost icon small" data-move="${i}:1" title="Move down" ${n === items.length - 1 ? "disabled" : ""}>${icon("down")}</button>` : ""}
+                <button class="ghost icon small" data-details="${esc(p.name)}" title="Details">${icon("sliders")}</button>
+                ${owner ? `<button class="danger icon small" data-remove="${i}" title="Remove">${icon("trash")}</button>` : ""}
+              </div>
+              ${open.has(p.name) ? details(p, i) : ""}
+            </div>`;
+          })
+          .join("")}</div>`;
+      })
+      .join("");
+  }
+
+  function move(i: number, dir: number) {
+    const cat = rows[i].category;
+    const items = rows.map((p, idx) => ({ p, idx })).filter((x) => x.p.category === cat).sort((a, b) => a.p.priority - b.p.priority);
+    items.forEach((x, n) => (x.p.priority = n));
+    const at = items.findIndex((x) => x.idx === i);
+    const other = items[at + dir];
+    if (!other) return;
+    [rows[i].priority, other.p.priority] = [other.p.priority, rows[i].priority];
+    render();
+    markDirty();
+  }
+
+  $("#list").addEventListener("input", (e) => {
+    const el = e.target as HTMLInputElement;
+    const i = Number(el.dataset.i);
+    const k = el.dataset.k as keyof Playlist | undefined;
+    if (!k || !rows[i]) return;
+    const row = rows[i] as Record<string, unknown>;
+    if (el.type === "checkbox") row[k] = el.checked;
+    else if (k === "priority" || k === "category") row[k] = Number(el.value) || 0;
+    else row[k] = el.value;
+    if (el.type === "checkbox" || k === "category" || k === "image") render();
+    markDirty();
+  });
+
+  $("#list").addEventListener("click", async (e) => {
+    const b = (e.target as HTMLElement).closest("button");
+    if (!b) return;
+    if (b.dataset.details) {
+      open.has(b.dataset.details) ? open.delete(b.dataset.details) : open.add(b.dataset.details);
+      render();
+    } else if (b.dataset.move) {
+      const [i, d] = b.dataset.move.split(":").map(Number);
+      move(i, d);
+    } else if (b.dataset.remove) {
+      const p = rows[Number(b.dataset.remove)];
+      if (await confirmBox(`Remove ${p.displayName || labelOf(p.name)}?`, { text: "It disappears from the lobby after you save.", ok: "Remove", danger: true })) {
+        rows.splice(Number(b.dataset.remove), 1);
+        render();
+        markDirty();
+      }
+    }
+  });
+
+  function addRow(name: string, label: string, image: string) {
+    if (rows.some((r) => r.name.toLowerCase() === name.toLowerCase())) return toast(`${name} is already in the list`, true);
+    const cat = /^Playlist_(Default|Show)/.test(name) ? 0 : 1;
+    const top = Math.max(-1, ...rows.filter((r) => r.category === cat).map((r) => r.priority));
+    rows.push({
+      name, displayName: label, enabled: true, image: "", autoImage: image, category: cat, priority: top + 1,
+      isDefault: false, visibleWhenDisabled: false, displayAsNew: cat === 1, limitedTime: cat === 1,
+      description: "", subname: "", violator: "", border: "",
+    });
+    render();
+    markDirty();
+    toast(`Added ${label || name}. Save to publish it.`);
+    renderLibrary();
+  }
+
+  function renderLibrary() {
+    const q = $<HTMLInputElement>("#library-q").value.trim().toLowerCase();
+    const have = new Set(rows.map((r) => r.name.toLowerCase()));
+    const list = library
+      .filter((l) => !have.has(l.name.toLowerCase()))
+      .filter((l) => !q || l.name.toLowerCase().includes(q) || l.label.toLowerCase().includes(q) || l.group.toLowerCase().includes(q))
+      .slice(0, 120);
+    $("#library-list").innerHTML = list.length
+      ? list
+          .map((l) => `<div class="lib-card">
+            <div class="tile" style="${l.image ? `background-image:url('${esc(l.image)}')` : ""}"></div>
+            <div class="meta"><strong>${esc(l.label || pretty(l.name))}</strong><span class="sub mono">${esc(l.name)}</span>
+              <span class="sub">${l.players ? `${l.players} players` : ""}${l.squad ? ` · teams of ${l.squad}` : ""}${l.builds.length ? ` · ${esc(l.builds.slice(0, 3).join(", "))}${l.builds.length > 3 ? "…" : ""}` : ""}</span></div>
+            <button type="button" class="ghost small" data-lib="${esc(l.name)}">${icon("plus")}Add</button>
+          </div>`)
+          .join("")
+      : '<div class="empty" style="grid-column:1/-1">Nothing matches.</div>';
+  }
+
+  $("#library-list").addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>("[data-lib]");
+    if (!b) return;
+    const l = library.find((x) => x.name === b.dataset.lib)!;
+    addRow(l.name, l.label || pretty(l.name), l.image);
+  });
+  $("#library-q").addEventListener("input", renderLibrary);
+  $("#library-close").addEventListener("click", () => $<HTMLDialogElement>("#library").close());
+  $("#custom-add").addEventListener("click", () => {
+    const name = $<HTMLInputElement>("#custom-name").value.trim();
+    if (!/^[A-Za-z0-9_]+$/.test(name)) return toast("Playlist names use letters, digits and underscores only", true);
+    addRow(name, labelOf(name), library.find((l) => l.name === name)?.image ?? "");
+    $<HTMLInputElement>("#custom-name").value = "";
+  });
+  $<HTMLFormElement>("#library-form").addEventListener("submit", (e) => e.preventDefault());
+
+  $("#add").addEventListener("click", async () => {
+    if (!library.length) {
+      library = (await backend<{ library: LibraryEntry[] }>("GET", "/playlists/library").catch(() => ({ library: [] }))).library;
+    }
+    renderLibrary();
+    $<HTMLDialogElement>("#library").showModal();
+    $<HTMLInputElement>("#library-q").focus();
+  });
+
+  $("#revert").addEventListener("click", load);
+  $("#save").addEventListener("click", () =>
+    act(() => backend("PUT", "/playlists", { playlists: rows.map(({ autoImage, ...r }) => r) }), "Playlists saved. Players see them after their next login.", load),
+  );
+  addEventListener("beforeunload", (e) => dirty() && owner && e.preventDefault());
+
+  async function load() {
+    try {
+      const [{ playlists = [] }, m] = await Promise.all([backend<{ playlists: Playlist[] }>("GET", "/playlists"), me()]);
+      owner = m.role === "owner";
+      rows = playlists;
+      saved = snapshot();
+      if (!owner) $("#note").textContent = "Only owners can change playlists.";
+      render();
+      markDirty();
+      if (!library.length) {
+        backend<{ library: LibraryEntry[] }>("GET", "/playlists/library")
+          .then((r) => {
+            library = r.library ?? [];
+            render();
+          })
+          .catch(() => {});
+      }
+    } catch (err) {
+      $("#list").innerHTML = `<div class="card-body">${failed(err)}</div>`;
+    }
+  }
+  load();
+</script>

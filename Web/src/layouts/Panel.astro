@@ -1,0 +1,80 @@
+---
+import Base from "./Base.astro";
+import Icon from "../components/Icon.astro";
+import type { IconName } from "../lib/icons";
+
+interface Props { title: string; tab: string }
+const { title, tab } = Astro.props;
+
+type Item = { tab: string; href: string; label: string; icon: IconName; owner?: boolean };
+const sections: { label: string; items: Item[] }[] = [
+  { label: "Live", items: [
+    { tab: "overview", href: "/", label: "Overview", icon: "home" },
+    { tab: "players", href: "/players/", label: "Players", icon: "users" },
+    { tab: "servers", href: "/servers/", label: "Game servers", icon: "server" },
+    { tab: "chat", href: "/chat/", label: "Chat", icon: "chat" },
+  ] },
+  { label: "Moderation", items: [
+    { tab: "accounts", href: "/accounts/", label: "Accounts", icon: "search" },
+    { tab: "reports", href: "/reports/", label: "Reports", icon: "flag" },
+    { tab: "audit", href: "/audit/", label: "Audit log", icon: "clock" },
+  ] },
+  { label: "Configure", items: [
+    { tab: "playlists", href: "/playlists/", label: "Playlists", icon: "list" },
+    { tab: "files", href: "/files/", label: "Files", icon: "file", owner: true },
+    { tab: "admins", href: "/admins/", label: "Admins", icon: "shield", owner: true },
+  ] },
+];
+---
+<Base title={title}>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="/">
+        <span class="brand-mark"><Icon name="logo" /></span>
+        <span class="brand-text">
+          <div class="brand-name">SILICON</div>
+          <div class="brand-sub" id="backend-name">&nbsp;</div>
+        </span>
+      </a>
+      {sections.map((s) => (
+        <Fragment>
+          <div class="nav-label">{s.label}</div>
+          {s.items.map((i) => (
+            <a class:list={["nav-item", { active: i.tab === tab, hidden: i.owner }]} href={i.href} data-owner={i.owner ? "" : undefined}>
+              <Icon name={i.icon} /><span>{i.label}</span>
+            </a>
+          ))}
+        </Fragment>
+      ))}
+      <div class="sidebar-foot">
+        <div class="avatar" id="me-initial">?</div>
+        <div class="who"><strong id="me-name">&nbsp;</strong><div class="sub" id="me-role">&nbsp;</div></div>
+        <button class="ghost icon" id="logout" title="Log out"><Icon name="logout" /></button>
+      </div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <h1>{title}</h1>
+        <slot name="actions" />
+        <span class="pill" id="backend-pill">connecting</span>
+      </header>
+      <main class="content"><slot /></main>
+    </div>
+  </div>
+  <dialog id="dialog">
+    <form method="dialog">
+      <h3 id="dialog-title"></h3>
+      <p id="dialog-text"></p>
+      <label class="field hidden" id="dialog-field"><span id="dialog-label"></span><input id="dialog-input" autocomplete="off" /></label>
+      <div class="row">
+        <button class="ghost" type="button" id="dialog-cancel">Cancel</button>
+        <button id="dialog-ok" value="ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="drawer" class="drawer"><div id="drawer-content"></div></dialog>
+  <div class="toasts" id="toasts"></div>
+</Base>
+<script>
+  import "../lib/shell";
+</script>

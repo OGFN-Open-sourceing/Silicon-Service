@@ -1,0 +1,46 @@
+---
+import Panel from "../layouts/Panel.astro";
+---
+<Panel title="Game servers" tab="servers">
+  <div class="card">
+    <div class="card-head"><h2>Registered sessions <span class="muted" id="count"></span></h2></div>
+    <div id="list"><div class="card-body"><div class="skeleton"></div></div></div>
+  </div>
+</Panel>
+<script>
+  import { $, backend, esc, act, confirmBox, every, table, onClick, empty, failed, button, ago, me } from "../lib/core";
+  import { icon } from "../lib/icons";
+
+  type Server = { id: string; address: string; playlist: string; state: string; players: number; maxPlayers: number; lastHeartbeat: number };
+
+  async function load() {
+    try {
+      const [{ servers = [] }, m] = await Promise.all([backend<{ servers: Server[] }>("GET", "/servers"), me()]);
+      $("#count").textContent = `(${servers.length})`;
+      $("#list").innerHTML = table(
+        ["Server", "Playlist", "State", "Players", "Heartbeat", ""],
+        servers.map((s) => {
+          const fill = s.maxPlayers ? Math.round((s.players / s.maxPlayers) * 100) : 0;
+          return [
+            `<div class="person"><div class="avatar">${icon("server")}</div><div><strong class="mono" style="font-size:13px">${esc(s.address)}</strong><div class="sub mono">${esc(s.id.slice(0, 12))}</div></div></div>`,
+            esc(s.playlist || "-"),
+            `<span class="pill ${s.state === "in match" ? "ok" : "info"}">${esc(s.state)}</span>`,
+            `<div style="min-width:120px"><strong>${s.players}</strong><span class="muted"> / ${s.maxPlayers}</span><div style="height:4px;background:var(--surface-3);border-radius:2px;margin-top:6px"><div style="height:4px;width:${fill}%;background:var(--accent-hi);border-radius:2px"></div></div></div>`,
+            `<span class="muted">${esc(ago(s.lastHeartbeat))}</span>`,
+            m.role === "owner" ? button("End match", { end: s.id, addr: s.address }, "danger", "power") : "",
+          ];
+        }),
+        empty("server", "No game servers are registered."),
+      );
+      onClick($("#list"), "[data-end]", async (d) => {
+        const ok = await confirmBox(`End the match on ${d.addr}?`, { text: "Its players are sent back to the lobby.", ok: "End match", danger: true });
+        if (ok) act(() => backend("POST", `/servers/${encodeURIComponent(d.end!)}/end`, {}), "Match ended", load);
+      });
+    } catch (err) {
+      $("#list").innerHTML = `<div class="card-body">${failed(err)}</div>`;
+    }
+  }
+
+  load();
+  every(5000, load);
+</script>

@@ -1,0 +1,85 @@
+---
+import Panel from "../layouts/Panel.astro";
+import Icon from "../components/Icon.astro";
+---
+<Panel title="Players" tab="players">
+  <div class="grid stats">
+    <div class="card stat"><div class="stat-icon"><Icon name="users" /></div><div class="stat-label">Online</div><div class="stat-value" id="c-all">-</div></div>
+    <div class="card stat"><div class="stat-icon"><Icon name="home" /></div><div class="stat-label">In the lobby</div><div class="stat-value" id="c-lobby">-</div></div>
+    <div class="card stat"><div class="stat-icon"><Icon name="queue" /></div><div class="stat-label">In queue</div><div class="stat-value" id="c-queue">-</div></div>
+    <div class="card stat"><div class="stat-icon"><Icon name="swords" /></div><div class="stat-label">In a match</div><div class="stat-value" id="c-match">-</div></div>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <h2>Online now</h2>
+      <div class="segmented" id="show"><button data-s="" class="on">All</button><button data-s="lobby">Lobby</button><button data-s="queue">Queue</button><button data-s="match">Match</button></div>
+      <div class="search" style="max-width:280px"><Icon name="search" /><input id="filter" placeholder="Filter by name or id" /></div>
+    </div>
+    <div id="list"><div class="card-body"><div class="skeleton"></div></div></div>
+  </div>
+</Panel>
+<script>
+  import { $, backend, esc, act, ask, every, table, person, onClick, empty, failed, button } from "../lib/core";
+  import { openAccount } from "../lib/account";
+
+  type Player = { accountId: string; displayName: string; state: string; playlist: string; queuePos: number; queuedSeconds: number };
+  let players: Player[] = [];
+  let show = "";
+
+  const pills: Record<string, [string, string]> = { lobby: ["", "Lobby"], queue: ["warn", "In queue"], match: ["ok", "In a match"] };
+  const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  function render() {
+    const q = $<HTMLInputElement>("#filter").value.trim().toLowerCase();
+    const count = (s: string) => players.filter((p) => p.state === s).length;
+    $("#c-all").textContent = String(players.length);
+    $("#c-lobby").textContent = String(count("lobby"));
+    $("#c-queue").textContent = String(count("queue"));
+    $("#c-match").textContent = String(count("match"));
+
+    const shown = players.filter((p) => (!show || p.state === show) && (!q || p.displayName.toLowerCase().includes(q) || p.accountId.includes(q)));
+    $("#list").innerHTML = table(
+      ["Player", "State", "Playlist", "Queue", ""],
+      shown.map((p) => {
+        const [cls, label] = pills[p.state] ?? ["", p.state];
+        return [
+          `<div data-open="${esc(p.accountId)}" style="cursor:pointer">${person(p.displayName, p.accountId)}</div>`,
+          `<span class="pill ${cls}">${esc(label)}</span>`,
+          `<span class="muted">${esc(p.playlist || "-")}</span>`,
+          p.state === "queue" ? `<strong>#${p.queuePos || "?"}</strong> <span class="muted">· ${mmss(p.queuedSeconds)}</span>` : '<span class="muted">-</span>',
+          button("Kick", { kick: p.accountId, name: p.displayName }, "ghost", "kick") + button("Ban", { ban: p.accountId, name: p.displayName }, "danger", "ban"),
+        ];
+      }),
+      empty("users", q || show ? "Nobody matches that filter." : "Nobody is online right now."),
+    );
+    onClick($("#list"), "[data-open]", (d) => openAccount(d.open!, load));
+    onClick($("#list"), "[data-kick]", async (d) => {
+      const reason = await ask(`Kick ${d.name}?`, { label: "Reason (optional)", ok: "Kick", danger: true });
+      if (reason !== null) act(() => backend("POST", `/players/${encodeURIComponent(d.kick!)}/kick`, { reason }), `Kicked ${d.name}`, load);
+    });
+    onClick($("#list"), "[data-ban]", async (d) => {
+      const reason = await ask(`Ban ${d.name}?`, { text: "They are kicked and can't log in until unbanned.", label: "Reason", ok: "Ban", danger: true });
+      if (reason !== null) act(() => backend("POST", `/accounts/${encodeURIComponent(d.ban!)}/ban`, { reason }), `Banned ${d.name}`, load);
+    });
+  }
+
+  async function load() {
+    try {
+      players = (await backend<{ players: Player[] }>("GET", "/players")).players ?? [];
+      render();
+    } catch (err) {
+      $("#list").innerHTML = `<div class="card-body">${failed(err)}</div>`;
+    }
+  }
+
+  $("#filter").addEventListener("input", render);
+  $("#show").addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest("button");
+    if (!b) return;
+    show = b.dataset.s ?? "";
+    document.querySelectorAll("#show button").forEach((x) => x.classList.toggle("on", x === b));
+    render();
+  });
+  load();
+  every(5000, load);
+</script>

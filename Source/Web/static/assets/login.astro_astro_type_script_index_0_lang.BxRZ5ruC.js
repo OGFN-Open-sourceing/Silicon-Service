@@ -1,0 +1,1 @@
+import{i as e,t}from"./core.BJARhmdM.js";var n=t(`#login-form`);n.addEventListener(`submit`,async r=>{r.preventDefault();let i=new FormData(n),a=n.querySelector(`button`);a.disabled=!0,t(`#login-error`).textContent=``;try{await e(`POST`,`/login`,{user:i.get(`user`),password:i.get(`password`)}),location.href=`/`}catch(e){t(`#login-error`).textContent=e.message,a.disabled=!1}});
