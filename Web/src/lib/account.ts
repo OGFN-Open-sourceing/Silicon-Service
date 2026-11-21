@@ -19,6 +19,10 @@ export type Account = {
   xp: number;
   bookLevel: number;
   battlePass: boolean;
+  acActive: boolean;
+  acDriver: boolean;
+  acFlagged: string;
+  acStrikes: number;
 };
 
 const stateLabel: Record<string, string> = { lobby: "In the lobby", queue: "In queue", match: "In a match", offline: "Offline" };
@@ -73,11 +77,20 @@ export async function openAccount(id: string, changed?: () => unknown) {
         </div>
       </div>
       <div>
+        <div class="section-title">Anti-cheat</div>
+        <div class="facts">
+          <div class="fact"><div class="stat-label">Aether</div><div>${a.acActive ? (a.acDriver ? "running (kernel)" : "running (user mode)") : "not running"}</div></div>
+          <div class="fact"><div class="stat-label">Severe strikes</div><b>${a.acStrikes}</b></div>
+          ${a.acFlagged ? `<div class="fact" style="grid-column:1/-1"><div class="stat-label">Flagged</div><div class="mono" style="overflow-wrap:anywhere">${esc(a.acFlagged)}</div></div>` : ""}
+        </div>
+      </div>
+      <div>
         <div class="section-title">Actions</div>
         <div class="row">
           ${a.online ? button("Kick", { act: "kick" }, "ghost", "kick") : ""}
           ${a.banned ? button("Unban", { act: "unban" }, "ghost", "check") : button("Ban", { act: "ban" }, "danger", "ban")}
           ${owner ? button("V-Bucks", { act: "vbucks" }, "ghost", "coin") : ""}
+          ${owner ? button("Grant item", { act: "grant" }, "ghost", "plus") : ""}
           ${owner ? button(a.founder ? "Remove founder" : "Make founder", { act: "founder" }, "ghost", "shield") : ""}
         </div>
       </div>
@@ -104,6 +117,11 @@ export async function openAccount(id: string, changed?: () => unknown) {
         case "vbucks": {
           const v = await ask(`V-Bucks for ${a.displayName}`, { text: `Balance now: ${a.vbucks.toLocaleString()}`, label: "Amount to add (negative removes)", value: "1000", type: "number", ok: "Apply" });
           if (v !== null && Number.isFinite(Number(v))) act(() => backend("POST", `${path}/vbucks`, { amount: Number(v) }), `Updated ${a.displayName}'s V-Bucks`, refresh);
+          break;
+        }
+        case "grant": {
+          const id = await ask(`Grant an item to ${a.displayName}`, { text: "A full template id. They see it after a relog.", label: "Template id", value: "AthenaCharacter:CID_028_Athena_Commando_F", ok: "Grant" });
+          if (id) act(() => backend("POST", `${path}/grant`, { templateId: id.trim() }), `Granted ${id.trim()}`, refresh);
           break;
         }
         case "founder":

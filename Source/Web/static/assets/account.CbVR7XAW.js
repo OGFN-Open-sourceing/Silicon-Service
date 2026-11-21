@@ -23,12 +23,21 @@ import{a as e,b as t,c as n,d as r,h as i,l as a,n as o,o as s,p as c,r as l,s a
         </div>
       </div>
       <div>
+        <div class="section-title">Anti-cheat</div>
+        <div class="facts">
+          <div class="fact"><div class="stat-label">Aether</div><div>${_.acActive?_.acDriver?`running (kernel)`:`running (user mode)`:`not running`}</div></div>
+          <div class="fact"><div class="stat-label">Severe strikes</div><b>${_.acStrikes}</b></div>
+          ${_.acFlagged?`<div class="fact" style="grid-column:1/-1"><div class="stat-label">Flagged</div><div class="mono" style="overflow-wrap:anywhere">${r(_.acFlagged)}</div></div>`:``}
+        </div>
+      </div>
+      <div>
         <div class="section-title">Actions</div>
         <div class="row">
           ${_.online?u(`Kick`,{act:`kick`},`ghost`,`kick`):``}
           ${_.banned?u(`Unban`,{act:`unban`},`ghost`,`check`):u(`Ban`,{act:`ban`},`danger`,`ban`)}
           ${v?u(`V-Bucks`,{act:`vbucks`},`ghost`,`coin`):``}
+          ${v?u(`Grant item`,{act:`grant`},`ghost`,`plus`):``}
           ${v?u(_.founder?`Remove founder`:`Make founder`,{act:`founder`},`ghost`,`shield`):``}
         </div>
       </div>
-    </div>`),x=`/accounts/${encodeURIComponent(_.accountId)}`;b.querySelector(`[data-close]`)?.addEventListener(`click`,()=>b.closest(`dialog`).close()),b.querySelectorAll(`[data-act]`).forEach(t=>t.addEventListener(`click`,async()=>{switch(t.dataset.act){case`kick`:{let t=await e(`Kick ${_.displayName}?`,{label:`Reason (optional)`,ok:`Kick`,danger:!0});t!==null&&o(()=>s(`POST`,`/players/${encodeURIComponent(_.accountId)}/kick`,{reason:t}),`Kicked ${_.displayName}`,y);break}case`ban`:{let t=await e(`Ban ${_.displayName}?`,{text:`They are kicked and can't log in until unbanned.`,label:`Reason`,ok:`Ban`,danger:!0});t!==null&&o(()=>s(`POST`,`${x}/ban`,{reason:t}),`Banned ${_.displayName}`,y);break}case`unban`:await n(`Unban ${_.displayName}?`,{ok:`Unban`})&&o(()=>s(`POST`,`${x}/unban`,{}),`Unbanned ${_.displayName}`,y);break;case`vbucks`:{let t=await e(`V-Bucks for ${_.displayName}`,{text:`Balance now: ${_.vbucks.toLocaleString()}`,label:`Amount to add (negative removes)`,value:`1000`,type:`number`,ok:`Apply`});t!==null&&Number.isFinite(Number(t))&&o(()=>s(`POST`,`${x}/vbucks`,{amount:Number(t)}),`Updated ${_.displayName}'s V-Bucks`,y);break}case`founder`:o(()=>s(`POST`,`${x}/founder`,{founder:!_.founder}),_.founder?`Founder removed`:`Founder granted`,y)}}))}export{m as n,p as t};
+    </div>`),x=`/accounts/${encodeURIComponent(_.accountId)}`;b.querySelector(`[data-close]`)?.addEventListener(`click`,()=>b.closest(`dialog`).close()),b.querySelectorAll(`[data-act]`).forEach(t=>t.addEventListener(`click`,async()=>{switch(t.dataset.act){case`kick`:{let t=await e(`Kick ${_.displayName}?`,{label:`Reason (optional)`,ok:`Kick`,danger:!0});t!==null&&o(()=>s(`POST`,`/players/${encodeURIComponent(_.accountId)}/kick`,{reason:t}),`Kicked ${_.displayName}`,y);break}case`ban`:{let t=await e(`Ban ${_.displayName}?`,{text:`They are kicked and can't log in until unbanned.`,label:`Reason`,ok:`Ban`,danger:!0});t!==null&&o(()=>s(`POST`,`${x}/ban`,{reason:t}),`Banned ${_.displayName}`,y);break}case`unban`:await n(`Unban ${_.displayName}?`,{ok:`Unban`})&&o(()=>s(`POST`,`${x}/unban`,{}),`Unbanned ${_.displayName}`,y);break;case`vbucks`:{let t=await e(`V-Bucks for ${_.displayName}`,{text:`Balance now: ${_.vbucks.toLocaleString()}`,label:`Amount to add (negative removes)`,value:`1000`,type:`number`,ok:`Apply`});t!==null&&Number.isFinite(Number(t))&&o(()=>s(`POST`,`${x}/vbucks`,{amount:Number(t)}),`Updated ${_.displayName}'s V-Bucks`,y);break}case`grant`:{let t=await e(`Grant an item to ${_.displayName}`,{text:`A full template id. They see it after a relog.`,label:`Template id`,value:`AthenaCharacter:CID_028_Athena_Commando_F`,ok:`Grant`});t&&o(()=>s(`POST`,`${x}/grant`,{templateId:t.trim()}),`Granted ${t.trim()}`,y);break}case`founder`:o(()=>s(`POST`,`${x}/founder`,{founder:!_.founder}),_.founder?`Founder removed`:`Founder granted`,y)}}))}export{m as n,p as t};

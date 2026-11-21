@@ -48,6 +48,19 @@ With no `q`, the most recently active accounts.
 
 `POST /accounts/{accountId}/founder` with `{ "founder": true|false }`. Owner only.
 
+`POST /accounts/{accountId}/grant` with `{ "templateId": "AthenaCharacter:CID_028_Athena_Commando_F" }` adds a locker item.
+`409` if they already own it. Owner only.
+
+The account detail also has `acActive`, `acDriver`, `acFlagged` and `acStrikes` (severe Aether strikes).
+
+## Anti-cheat (Aether)
+
+`GET /anticheat` returns `{ "settings": { "required", "requireDriver", "mode", "autoBan", "banStrikes", "heartbeatSec" },
+"sessions": [ { "sessionId", "accountId", "displayName", "driver", "clientVersion", "startedAt", "lastSeenMs", "active", "flagged", "action" } ],
+"strikes": [ { "accountId", "displayName", "type", "detail", "severe", "action", "machine", "createdAt" } ] }`, the 150 newest strikes.
+
+`POST /anticheat/{accountId}/clear` with `{}` deletes that account's strikes. Owner only.
+
 ## Reports
 
 `GET /reports` returns `{ "reports": [ { "id", "createdAt", "reporter", "reporterName", "reported", "reportedName", "reason", "details", "status": "open|resolved" } ] }`
@@ -98,6 +111,7 @@ Silicon enforces two roles before a call reaches the backend:
 
 - **owner**: everything.
 - **moderator**: everything except `PUT /files/*`, `POST /restart`, `POST|PUT /playlists`,
-  `POST /matchmaking*`, `POST /accounts/*/vbucks` and `POST /accounts/*/founder`.
+  `POST /matchmaking*`, `POST /accounts/*/vbucks`, `POST /accounts/*/founder`,
+  `POST /accounts/*/grant` and `POST /anticheat/*`.
 
 Every non-GET call is written to Silicon's audit log with the admin, their IP, the body and the answer's status.

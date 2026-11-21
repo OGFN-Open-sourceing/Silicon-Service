@@ -1,0 +1,89 @@
+---
+import Panel from "../layouts/Panel.astro";
+---
+<Panel title="Anti-cheat" tab="anticheat">
+  <div class="card">
+    <div class="card-head"><h2>Aether</h2></div>
+    <div id="settings"><div class="card-body"><div class="skeleton"></div></div></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Live sessions</h2></div>
+    <div id="sessions"><div class="card-body"><div class="skeleton"></div></div></div>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <h2>Strikes</h2>
+      <div class="segmented" id="tabs"><button data-show="severe" class="on">Severe</button><button data-show="all">All</button></div>
+    </div>
+    <div id="strikes"><div class="card-body"><div class="skeleton"></div></div></div>
+  </div>
+</Panel>
+<script>
+  import { $, backend, esc, act, confirmBox, table, onClick, empty, failed, button, ago, when, me } from "../lib/core";
+  import { openAccount } from "../lib/account";
+
+  type Session = { sessionId: string; accountId: string; displayName: string; driver: boolean; clientVersion: string; startedAt: number; lastSeenMs: number; active: boolean; flagged: string; action: string };
+  type Strike = { accountId: string; displayName: string; type: string; detail: string; severe: boolean; action: string; machine: string; createdAt: number };
+  type Settings = { required: boolean; requireDriver: boolean; mode: string; autoBan: boolean; banStrikes: number; heartbeatSec: number };
+  let show = "severe";
+
+  const onOff = (v: boolean) => `<span class="pill ${v ? "info" : ""} plain">${v ? "on" : "off"}</span>`;
+
+  async function load() {
+    try {
+      const owner = (await me()).role === "owner";
+      const { settings, sessions = [], strikes = [] } = await backend<{ settings: Settings; sessions: Session[]; strikes: Strike[] }>("GET", "/anticheat");
+
+      $("#settings").innerHTML = `<div class="card-body"><div class="facts">
+        <div class="fact"><div class="stat-label">Mode</div><b>${esc(settings.mode)}</b></div>
+        <div class="fact"><div class="stat-label">Required for matchmaking</div>${onOff(settings.required)}</div>
+        <div class="fact"><div class="stat-label">Kernel driver required</div>${onOff(settings.requireDriver)}</div>
+        <div class="fact"><div class="stat-label">Auto-ban</div>${onOff(settings.autoBan)}<div class="sub">after ${settings.banStrikes} severe strikes</div></div>
+      </div><div class="sub" style="margin-top:10px">Change these with the AC_* keys in the backend's .env.</div></div>`;
+
+      $("#sessions").innerHTML = table(
+        ["Player", "Driver", "Last heartbeat", "Started", "State"],
+        sessions.map((s) => [
+          `<a href="#" data-open="${esc(s.accountId)}"><strong>${esc(s.displayName)}</strong></a><div class="sub mono">${esc(s.accountId)}</div>`,
+          s.driver ? '<span class="pill info plain">kernel</span>' : '<span class="pill warn plain">user mode</span>',
+          `${Math.round(s.lastSeenMs / 1000)}s ago`,
+          `<span title="${esc(when(s.startedAt))}">${esc(ago(s.startedAt))}</span>`,
+          s.flagged ? `<span class="pill warn">${esc(s.action)}</span><div class="sub">${esc(s.flagged)}</div>` : s.active ? '<span class="pill plain">clean</span>' : '<span class="pill">timed out</span>',
+        ]),
+        empty("shield", "Nobody is running Aether right now."),
+      );
+
+      const shown = strikes.filter((s) => show === "all" || s.severe);
+      $("#strikes").innerHTML = table(
+        ["Player", "Detection", "Action", "When", ""],
+        shown.map((s) => [
+          `<a href="#" data-open="${esc(s.accountId)}"><strong>${esc(s.displayName || s.accountId)}</strong></a><div class="sub mono">${esc(s.machine.slice(0, 12))}</div>`,
+          `<span class="pill ${s.severe ? "warn" : ""} plain">${esc(s.type)}</span>${s.detail ? `<div class="sub mono" style="overflow-wrap:anywhere">${esc(s.detail)}</div>` : ""}`,
+          esc(s.action),
+          `<span title="${esc(when(s.createdAt))}">${esc(ago(s.createdAt))}</span>`,
+          owner ? button("Clear", { clear: s.accountId, name: s.displayName || s.accountId }, "ghost", "trash") : "",
+        ]),
+        empty("check", show === "severe" ? "No severe detections." : "No strikes recorded."),
+      );
+
+      for (const box of [$("#sessions"), $("#strikes")]) {
+        onClick(box, "[data-open]", (d) => openAccount(d.open!, load));
+      }
+      onClick($("#strikes"), "[data-clear]", async (d) => {
+        if (await confirmBox(`Clear every strike for ${d.name}?`, { text: "Their strike count goes back to zero. This can't be undone.", ok: "Clear", danger: true }))
+          act(() => backend("POST", `/anticheat/${encodeURIComponent(d.clear!)}/clear`, {}), `Cleared strikes for ${d.name}`, load);
+      });
+    } catch (err) {
+      for (const id of ["#settings", "#sessions", "#strikes"]) $(id).innerHTML = `<div class="card-body">${failed(err)}</div>`;
+    }
+  }
+
+  $("#tabs").addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest("button");
+    if (!b) return;
+    show = b.dataset.show!;
+    document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
+    load();
+  });
+  load();
+</script>
