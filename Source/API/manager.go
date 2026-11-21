@@ -59,6 +59,9 @@ func ownerOnly(method, path string) bool {
 		strings.HasPrefix(path, "/anticheat"),
 		strings.HasSuffix(path, "/vbucks"),
 		strings.HasSuffix(path, "/grant"),
+		strings.HasSuffix(path, "/exempt"),
+		strings.HasSuffix(path, "/hwid-ban"),
+		strings.HasSuffix(path, "/hwid-unban"),
 		strings.HasSuffix(path, "/founder"):
 		return true
 	}

@@ -51,15 +51,25 @@ With no `q`, the most recently active accounts.
 `POST /accounts/{accountId}/grant` with `{ "templateId": "AthenaCharacter:CID_028_Athena_Commando_F" }` adds a locker item.
 `409` if they already own it. Owner only.
 
-The account detail also has `acActive`, `acDriver`, `acFlagged` and `acStrikes` (severe Aether strikes).
+The account detail also has `acActive`, `acDriver`, `acFlagged`, `acStrikes` (severe Aether strikes), `acExempt`, `hwidBanned`
+and `machines`: `[ { "kind": "board|disk|mac|os", "id", "firstSeen", "lastSeen", "banned", "sharedWith": [ { "accountId", "displayName" } ] } ]`.
+
+`POST /accounts/{accountId}/exempt` with `{ "exempt": true|false }` turns the Aether blacklist off for that account (developers).
+Detections are still logged but never kick or ban. Owner only.
+
+`POST /accounts/{accountId}/hwid-ban` with `{ "reason": "..." }` bans every hardware id the account has run Aether with, and kicks it.
+`409` if it never ran Aether. `POST /accounts/{accountId}/hwid-unban` with `{}` lifts them. Owner only.
 
 ## Anti-cheat (Aether)
 
-`GET /anticheat` returns `{ "settings": { "required", "requireDriver", "mode", "autoBan", "banStrikes", "heartbeatSec" },
-"sessions": [ { "sessionId", "accountId", "displayName", "driver", "clientVersion", "startedAt", "lastSeenMs", "active", "flagged", "action" } ],
+`GET /anticheat` returns `{ "settings": { "required", "requireDriver", "mode", "autoBan", "banStrikes", "heartbeatSec", "hwidBan" },
+"sessions": [ { "sessionId", "accountId", "displayName", "driver", "clientVersion", "startedAt", "lastSeenMs", "active", "flagged", "action", "exempt" } ],
+"hwidBans": [ { "id", "kind", "accountId", "displayName", "reason", "by", "createdAt" } ],
 "strikes": [ { "accountId", "displayName", "type", "detail", "severe", "action", "machine", "createdAt" } ] }`, the 150 newest strikes.
 
 `POST /anticheat/{accountId}/clear` with `{}` deletes that account's strikes. Owner only.
+
+`POST /anticheat/hwid/{id}/remove` with `{}` lifts one hardware ban. Owner only.
 
 ## Reports
 
@@ -112,6 +122,7 @@ Silicon enforces two roles before a call reaches the backend:
 - **owner**: everything.
 - **moderator**: everything except `PUT /files/*`, `POST /restart`, `POST|PUT /playlists`,
   `POST /matchmaking*`, `POST /accounts/*/vbucks`, `POST /accounts/*/founder`,
-  `POST /accounts/*/grant` and `POST /anticheat/*`.
+  `POST /accounts/*/grant`, `POST /accounts/*/exempt`, `POST /accounts/*/hwid-ban`, `POST /accounts/*/hwid-unban`
+  and `POST /anticheat/*`.
 
 Every non-GET call is written to Silicon's audit log with the admin, their IP, the body and the answer's status.

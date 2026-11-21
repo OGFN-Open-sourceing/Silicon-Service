@@ -23,13 +23,47 @@ export type Account = {
   acDriver: boolean;
   acFlagged: string;
   acStrikes: number;
+  acExempt: boolean;
+  hwidBanned: boolean;
+  machines: Machine[];
 };
+
+type Machine = {
+  kind: string;
+  id: string;
+  firstSeen: number;
+  lastSeen: number;
+  banned: boolean;
+  sharedWith: { accountId: string; displayName: string }[];
+};
+
+const machineLabel: Record<string, string> = { board: "Motherboard", disk: "Boot disk", mac: "Network card", os: "Windows install" };
+
+function machinesHtml(machines: Machine[]): string {
+  if (!machines.length) return '<div class="sub">No hardware ids yet. They are recorded the first time this account runs Aether.</div>';
+  return `<div class="facts">${machines
+    .map(
+      (m) => `<div class="fact">
+        <div class="stat-label">${esc(machineLabel[m.kind] ?? m.kind)}${m.banned ? ' <span class="pill bad">banned</span>' : ""}</div>
+        <div class="mono">${esc(m.id)}</div>
+        <div class="sub" title="${esc(when(m.lastSeen))}">seen ${esc(ago(m.lastSeen))}</div>
+        ${
+          m.sharedWith.length
+            ? `<div class="sub">Also used by ${m.sharedWith.map((o) => `<a href="#" data-account="${esc(o.accountId)}">${esc(o.displayName || o.accountId)}</a>`).join(", ")}</div>`
+            : ""
+        }
+      </div>`,
+    )
+    .join("")}</div>`;
+}
 
 const stateLabel: Record<string, string> = { lobby: "In the lobby", queue: "In queue", match: "In a match", offline: "Offline" };
 
-export function flags(a: { banned: boolean; founder: boolean; host: boolean; online: boolean }): string {
+export function flags(a: { banned: boolean; founder: boolean; host: boolean; online: boolean; hwidBanned?: boolean; acExempt?: boolean }): string {
   return [
     a.banned ? '<span class="pill bad">Banned</span>' : "",
+    a.hwidBanned ? '<span class="pill bad">HWID banned</span>' : "",
+    a.acExempt ? '<span class="pill info plain">AC exempt</span>' : "",
     a.online ? '<span class="pill ok">Online</span>' : "",
     a.founder ? '<span class="pill info plain">Founder</span>' : "",
     a.host ? '<span class="pill warn plain">Host account</span>' : "",
@@ -81,8 +115,14 @@ export async function openAccount(id: string, changed?: () => unknown) {
         <div class="facts">
           <div class="fact"><div class="stat-label">Aether</div><div>${a.acActive ? (a.acDriver ? "running (kernel)" : "running (user mode)") : "not running"}</div></div>
           <div class="fact"><div class="stat-label">Severe strikes</div><b>${a.acStrikes}</b></div>
+          <div class="fact"><div class="stat-label">Blacklist</div><div>${a.acExempt ? "exempt (dev)" : "enforced"}</div></div>
+          <div class="fact"><div class="stat-label">Hardware</div><div>${a.hwidBanned ? "banned" : a.machines.length ? "not banned" : "unknown"}</div></div>
           ${a.acFlagged ? `<div class="fact" style="grid-column:1/-1"><div class="stat-label">Flagged</div><div class="mono" style="overflow-wrap:anywhere">${esc(a.acFlagged)}</div></div>` : ""}
         </div>
+      </div>
+      <div>
+        <div class="section-title">Hardware ids</div>
+        ${machinesHtml(a.machines)}
       </div>
       <div>
         <div class="section-title">Actions</div>
@@ -92,12 +132,20 @@ export async function openAccount(id: string, changed?: () => unknown) {
           ${owner ? button("V-Bucks", { act: "vbucks" }, "ghost", "coin") : ""}
           ${owner ? button("Grant item", { act: "grant" }, "ghost", "plus") : ""}
           ${owner ? button(a.founder ? "Remove founder" : "Make founder", { act: "founder" }, "ghost", "shield") : ""}
+          ${owner ? button(a.acExempt ? "Remove AC exemption" : "Exempt from AC blacklist", { act: "exempt" }, "ghost", "shield") : ""}
+          ${owner && a.machines.length ? (a.hwidBanned ? button("Remove HWID ban", { act: "hwid-unban" }, "ghost", "check") : button("HWID ban", { act: "hwid-ban" }, "danger", "ban")) : ""}
         </div>
       </div>
     </div>`);
 
   const path = `/accounts/${encodeURIComponent(a.accountId)}`;
   box.querySelector("[data-close]")?.addEventListener("click", () => (box.closest("dialog") as HTMLDialogElement).close());
+  box.querySelectorAll<HTMLElement>("[data-account]").forEach((el) =>
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      openAccount(el.dataset.account!, changed);
+    }),
+  );
   box.querySelectorAll<HTMLElement>("[data-act]").forEach((el) =>
     el.addEventListener("click", async () => {
       switch (el.dataset.act) {
@@ -126,6 +174,30 @@ export async function openAccount(id: string, changed?: () => unknown) {
         }
         case "founder":
           act(() => backend("POST", `${path}/founder`, { founder: !a.founder }), a.founder ? "Founder removed" : "Founder granted", refresh);
+          break;
+        case "exempt":
+          if (
+            a.acExempt ||
+            (await confirmBox(`Exempt ${a.displayName} from the Aether blacklist?`, {
+              text: "Aether stops blocking and kicking them for open tools like IDEs and debuggers. Detections are still logged. Meant for developers.",
+              ok: "Exempt",
+            }))
+          )
+            act(() => backend("POST", `${path}/exempt`, { exempt: !a.acExempt }), a.acExempt ? "AC exemption removed" : `${a.displayName} is exempt`, refresh);
+          break;
+        case "hwid-ban": {
+          const reason = await ask(`HWID ban ${a.displayName}?`, {
+            text: "Every PC this account has run Aether on is banned. Any account on those PCs is refused when Aether starts.",
+            label: "Reason",
+            ok: "HWID ban",
+            danger: true,
+          });
+          if (reason !== null) act(() => backend("POST", `${path}/hwid-ban`, { reason }), `HWID banned ${a.displayName}`, refresh);
+          break;
+        }
+        case "hwid-unban":
+          if (await confirmBox(`Remove the HWID ban for ${a.displayName}?`, { ok: "Remove" }))
+            act(() => backend("POST", `${path}/hwid-unban`, {}), "HWID ban removed", refresh);
           break;
       }
     }),

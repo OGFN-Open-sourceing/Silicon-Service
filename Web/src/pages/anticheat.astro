@@ -17,14 +17,20 @@ import Panel from "../layouts/Panel.astro";
     </div>
     <div id="strikes"><div class="card-body"><div class="skeleton"></div></div></div>
   </div>
+  <div class="card">
+    <div class="card-head"><h2>Hardware bans</h2></div>
+    <div id="hwid"><div class="card-body"><div class="skeleton"></div></div></div>
+  </div>
 </Panel>
 <script>
   import { $, backend, esc, act, confirmBox, table, onClick, empty, failed, button, ago, when, me } from "../lib/core";
   import { openAccount } from "../lib/account";
 
-  type Session = { sessionId: string; accountId: string; displayName: string; driver: boolean; clientVersion: string; startedAt: number; lastSeenMs: number; active: boolean; flagged: string; action: string };
+  type Session = { sessionId: string; accountId: string; displayName: string; driver: boolean; clientVersion: string; startedAt: number; lastSeenMs: number; active: boolean; flagged: string; action: string; exempt: boolean };
   type Strike = { accountId: string; displayName: string; type: string; detail: string; severe: boolean; action: string; machine: string; createdAt: number };
-  type Settings = { required: boolean; requireDriver: boolean; mode: string; autoBan: boolean; banStrikes: number; heartbeatSec: number };
+  type Settings = { required: boolean; requireDriver: boolean; mode: string; autoBan: boolean; banStrikes: number; heartbeatSec: number; hwidBan: boolean };
+  type HwidBan = { id: string; kind: string; accountId: string; displayName: string; reason: string; by: string; createdAt: number };
+  const kindLabel: Record<string, string> = { board: "Motherboard", disk: "Boot disk", mac: "Network card", os: "Windows install" };
   let show = "severe";
 
   const onOff = (v: boolean) => `<span class="pill ${v ? "info" : ""} plain">${v ? "on" : "off"}</span>`;
@@ -32,19 +38,19 @@ import Panel from "../layouts/Panel.astro";
   async function load() {
     try {
       const owner = (await me()).role === "owner";
-      const { settings, sessions = [], strikes = [] } = await backend<{ settings: Settings; sessions: Session[]; strikes: Strike[] }>("GET", "/anticheat");
+      const { settings, sessions = [], strikes = [], hwidBans = [] } = await backend<{ settings: Settings; sessions: Session[]; strikes: Strike[]; hwidBans: HwidBan[] }>("GET", "/anticheat");
 
       $("#settings").innerHTML = `<div class="card-body"><div class="facts">
         <div class="fact"><div class="stat-label">Mode</div><b>${esc(settings.mode)}</b></div>
         <div class="fact"><div class="stat-label">Required for matchmaking</div>${onOff(settings.required)}</div>
         <div class="fact"><div class="stat-label">Kernel driver required</div>${onOff(settings.requireDriver)}</div>
-        <div class="fact"><div class="stat-label">Auto-ban</div>${onOff(settings.autoBan)}<div class="sub">after ${settings.banStrikes} severe strikes</div></div>
+        <div class="fact"><div class="stat-label">Auto-ban</div>${onOff(settings.autoBan)}<div class="sub">after ${settings.banStrikes} severe strikes${settings.autoBan && settings.hwidBan ? ", HWID too" : ""}</div></div>
       </div><div class="sub" style="margin-top:10px">Change these with the AC_* keys in the backend's .env.</div></div>`;
 
       $("#sessions").innerHTML = table(
         ["Player", "Driver", "Last heartbeat", "Started", "State"],
         sessions.map((s) => [
-          `<a href="#" data-open="${esc(s.accountId)}"><strong>${esc(s.displayName)}</strong></a><div class="sub mono">${esc(s.accountId)}</div>`,
+          `<a href="#" data-open="${esc(s.accountId)}"><strong>${esc(s.displayName)}</strong></a>${s.exempt ? ' <span class="pill info plain">exempt</span>' : ""}<div class="sub mono">${esc(s.accountId)}</div>`,
           s.driver ? '<span class="pill info plain">kernel</span>' : '<span class="pill warn plain">user mode</span>',
           `${Math.round(s.lastSeenMs / 1000)}s ago`,
           `<span title="${esc(when(s.startedAt))}">${esc(ago(s.startedAt))}</span>`,
@@ -66,7 +72,23 @@ import Panel from "../layouts/Panel.astro";
         empty("check", show === "severe" ? "No severe detections." : "No strikes recorded."),
       );
 
-      for (const box of [$("#sessions"), $("#strikes")]) {
+      $("#hwid").innerHTML = table(
+        ["Account", "Hardware", "Reason", "When", ""],
+        hwidBans.map((b) => [
+          `<a href="#" data-open="${esc(b.accountId)}"><strong>${esc(b.displayName || b.accountId)}</strong></a>`,
+          `${esc(kindLabel[b.kind] ?? b.kind)}<div class="sub mono">${esc(b.id.slice(0, 12))}</div>`,
+          `${esc(b.reason || "-")}<div class="sub">by ${esc(b.by || "?")}</div>`,
+          `<span title="${esc(when(b.createdAt))}">${esc(ago(b.createdAt))}</span>`,
+          owner ? button("Remove", { unhwid: b.id, name: b.displayName || b.accountId }, "ghost", "trash") : "",
+        ]),
+        empty("check", "No hardware bans."),
+      );
+      onClick($("#hwid"), "[data-unhwid]", async (d) => {
+        if (await confirmBox(`Remove this hardware ban for ${d.name}?`, { text: "Only this one id is lifted. Use the account's drawer to lift all of them.", ok: "Remove" }))
+          act(() => backend("POST", `/anticheat/hwid/${encodeURIComponent(d.unhwid!)}/remove`, {}), "Hardware ban removed", load);
+      });
+
+      for (const box of [$("#sessions"), $("#strikes"), $("#hwid")]) {
         onClick(box, "[data-open]", (d) => openAccount(d.open!, load));
       }
       onClick($("#strikes"), "[data-clear]", async (d) => {
@@ -74,7 +96,7 @@ import Panel from "../layouts/Panel.astro";
           act(() => backend("POST", `/anticheat/${encodeURIComponent(d.clear!)}/clear`, {}), `Cleared strikes for ${d.name}`, load);
       });
     } catch (err) {
-      for (const id of ["#settings", "#sessions", "#strikes"]) $(id).innerHTML = `<div class="card-body">${failed(err)}</div>`;
+      for (const id of ["#settings", "#sessions", "#strikes", "#hwid"]) $(id).innerHTML = `<div class="card-body">${failed(err)}</div>`;
     }
   }
 
