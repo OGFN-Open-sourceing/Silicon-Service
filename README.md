@@ -64,17 +64,27 @@ Silicon's own messages tell you what's wrong when it can't use the backend: a wr
 backend's Silicon API switched off (no `SILICON_API_KEY`), or a wrong `backend.url`.
 
 - **admins**: owners can do everything. Moderators can view everything and ban, kick, resolve
-  reports and announce, but can't edit files, grant V-Bucks, change playlists or restart.
+  reports and announce, but can't edit files, grant V-Bucks or items, change playlists, clear
+  anti-cheat strikes or restart.
 
 ## What's in the panel
 
 A dark, launcher-style dashboard. The overview shows status, online/queue/in-match counts, a
 players-online chart (1 h, 6 h, 24 h), quick actions and recent admin activity. Other pages:
 online players by state with queue position and wait time, accounts (recent list, search, and a
-detail drawer with V-Bucks, level, battle pass, ban/unban, kick, V-Bucks and founder), reports,
-game servers (end match), a playlist editor (tiles, names, categories, order, flags, and adding
-modes from the backend's library), chat and announcements (sent under your admin name), backend
+detail drawer with V-Bucks, level, battle pass, anti-cheat status, ban/unban, kick, V-Bucks,
+item grants and founder), reports, anti-cheat (the backend's Aether settings, who is running it
+right now in kernel or user mode, and recent detections, with clearing strikes for owners), game
+servers (end match), a playlist editor (tiles, names, categories, order, flags, and adding modes
+from the backend's library), chat and announcements (sent under your admin name), backend
 restarts (owners), content files, the audit log of every admin action, and admin users.
+
+The anti-cheat page and item grants need a backend that implements `/anticheat` and
+`/accounts/{id}/grant` (see [API.md](API.md)). On older backends those calls fail and the rest of
+the panel keeps working.
+
+In the Vindertech V2 backend, the Silicon API lives in `src/http/routes/silicon/`, one file per
+area: `live`, `accounts`, `moderation` and `content`.
 
 ## Structure
 
